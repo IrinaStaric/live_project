@@ -1,0 +1,49 @@
+site_name: Live Project - Math Notes
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  features:
+    - navigation.tabs
+    - navigation.top
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Linear Algebra:
+      - Vectors & Matrices: linear-algebra/vectors-matrices.md
+      - Determinants: linear-algebra/determinants.md
+  - Calculus:
+      - Limits: calculus/limits.md
+      - Derivatives: calculus/derivatives.md
+      - Integrals: calculus/integrals.md
+  - Geometry:
+      - Lines & Planes: geometry/lines-planes.md
+      - Transformations: geometry/transformations.md
+  - Simulation: simulation.html
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+
+extra_css:
+  - stylesheets/extra.css
+
+
+
+

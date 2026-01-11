@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sine Wave Simulator</title>
+  <style>
+    :root { --bg:#0f111a; --panel:#171a26; --text:#e6e6e6; --muted:#a6a6a6; --line:#2b2f45; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 18px; }
+    h1 { font-size: 22px; margin: 6px 0 14px; }
+    p { color: var(--muted); margin: 0 0 14px; line-height: 1.4; }
+    .grid { display: grid; grid-template-columns: 360px 1fr; gap: 14px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap: 10px; margin: 10px 0; }
+    label { font-size: 13px; color: var(--muted); }
+    input[type="range"] { width: 210px; }
+    .value { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text); }
+    .checks { display:flex; gap: 10px; flex-wrap:wrap; margin-top: 8px; }
+    .checks label { color: var(--text); font-size: 13px; }
+    .legend { display:flex; gap: 14px; flex-wrap:wrap; font-size: 13px; color: var(--muted); margin-top: 8px; }
+    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+    canvas { width: 100%; height: 520px; display:block; background: #0b0d14; border-radius: 10px; border: 1px solid var(--line); }
+    .small { font-size: 12px; color: var(--muted); margin-top: 10px; }
+    .btnrow { display:flex; gap:10px; margin-top: 10px; }
+    button { background:#222845; color:var(--text); border:1px solid var(--line); padding:8px 10px; border-radius:10px; cursor:pointer; }
+    button:hover { filter: brightness(1.08); }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } input[type="range"]{ width: 100%; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Sine wave: function, derivative, integral</h1>
+    <p>
+      Interactive visualization for <b>f(x)=A·sin(ωx+φ)</b>, its derivative <b>f′(x)</b> and a numerical integral <b>∫f(x)dx</b>.
+      Use sliders to change parameters.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <div class="row">
+          <label for="A">Amplitude A</label>
+          <span class="value" id="AVal"></span>
+        </div>
+        <input id="A" type="range" min="0.2" max="3.0" step="0.05" value="1.5" />
+
+        <div class="row">
+          <label for="w">Angular frequency ω</label>
+          <span class="value" id="wVal"></span>
+        </div>
+        <input id="w" type="range" min="0.5" max="6.0" step="0.05" value="2.0" />
+
+        <div class="row">
+          <label for="phi">Phase φ (radians)</label>
+          <span class="value" id="phiVal"></span>
+        </div>
+        <input id="phi" type="range" min="-3.1416" max="3.1416" step="0.01" value="0.40" />
+
+        <div class="row">
+          <label for="xmax">x-range</label>
+          <span class="value" id="xmaxVal"></span>
+        </div>
+        <input id="xmax" type="range" min="6" max="40" step="1" value="18" />
+
+        <div class="checks">
+          <label><input id="showF" type="checkbox" checked /> f(x)</label>
+          <label><input id="showD" type="checkbox" checked /> f′(x)</label>
+          <label><input id="showI" type="checkbox" checked /> ∫f(x)dx</label>
+          <label><input id="animate" type="checkbox" checked /> animate marker</label>
+        </div>
+
+        <div class="btnrow">
+          <button id="reset">Reset</button>
+          <button id="pause">Pause</button>
+        </div>
+
+        <div class="legend">
+          <span><span class="dot" style="background:#6aa9ff;"></span>f(x)</span>
+          <span><span class="dot" style="background:#ff7aa2;"></span>f′(x)</span>
+          <span><span class="dot" style="background:#7dffb2;"></span>∫f(x)dx</span>
+          <span><span class="dot" style="background:#ffd36a;"></span>marker</span>
+        </div>
+
+        <div class="small">
+          Note: integral is computed numerically (cumulative sum) and shifted to fit the plot.
+        </div>
+      </div>
+
+      <div class="card">
+        <canvas id="c" width="1000" height="520"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const canvas = $("c");
+    const ctx = canvas.getContext("2d");
+
+    const controls = {
+      A: $("A"),
+      w: $("w"),
+      phi: $("phi"),
+      xmax: $("xmax"),
+      showF: $("showF"),
+      showD: $("showD"),
+      showI: $("showI"),
+      animate: $("animate")
+    };
+
+    const labels = {
+      AVal: $("AVal"),
+      wVal: $("wVal"),
+      phiVal: $("phiVal"),
+      xmaxVal: $("xmaxVal")
+    };
+
+    function fmt(n, d=2){ return Number(n).toFixed(d); }
+
+    function updateLabels() {
+      labels.AVal.textContent = fmt(controls.A.value, 2);
+      labels.wVal.textContent = fmt(controls.w.value, 2);
+      labels.phiVal.textContent = fmt(controls.phi.value, 2);
+      labels.xmaxVal.textContent = fmt(controls.xmax.value, 0);
+    }
+
+    // Resizing canvas to match CSS size for crisp drawing
+    function fitCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+
+    function f(x, A, w, phi) {
+      return A * Math.sin(w * x + phi);
+    }
+    function df(x, A, w, phi) {
+      return A * w * Math.cos(w * x + phi);
+    }
+
+    // Numerical integral (cumulative sum) with dx
+    function integralSeries(xs, ys) {
+      const out = new Array(ys.length);
+      let acc = 0;
+      out[0] = 0;
+      for (let i = 1; i < ys.length; i++) {
+        const dx = xs[i] - xs[i-1];
+        // trapezoid
+        acc += (ys[i-1] + ys[i]) * 0.5 * dx;
+        out[i] = acc;
+      }
+      return out;
+    }
+
+    function drawAxes(xmin, xmax, ymin, ymax, W, H, pad) {
+      ctx.clearRect(0,0,W,H);
+
+      // background grid
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.06)";
+      const gx = 10, gy = 10;
+
+      for (let i = 0; i <= gx; i++) {
+        const x = pad + (W - 2*pad) * (i/gx);
+        ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, H-pad); ctx.stroke();
+      }
+      for (let j = 0; j <= gy; j++) {
+        const y = pad + (H - 2*pad) * (j/gy);
+        ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W-pad, y); ctx.stroke();
+      }
+
+      // axes at 0 if visible
+      const x0 = mapX(0, xmin, xmax, W, pad);
+      const y0 = mapY(0, ymin, ymax, H, pad);
+
+      ctx.strokeStyle = "rgba(255,255,255,0.22)";
+      ctx.lineWidth = 1.5;
+
+      if (0 >= xmin && 0 <= xmax) {
+        ctx.beginPath(); ctx.moveTo(x0, pad); ctx.lineTo(x0, H-pad); ctx.stroke();
+      }
+      if (0 >= ymin && 0 <= ymax) {
+        ctx.beginPath(); ctx.moveTo(pad, y0); ctx.lineTo(W-pad, y0); ctx.stroke();
+      }
+
+      // labels
+      ctx.fillStyle = "rgba(255,255,255,0.65)";
+      ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.fillText("x", W - pad - 10, y0 - 6);
+      ctx.fillText("y", x0 + 6, pad + 14);
+    }
+
+    function mapX(x, xmin, xmax, W, pad) {
+      return pad + (x - xmin) / (xmax - xmin) * (W - 2*pad);
+    }
+    function mapY(y, ymin, ymax, H, pad) {
+      return pad + (ymax - y) / (ymax - ymin) * (H - 2*pad);
+    }
+
+    function plotLine(xs, ys, color, xmin, xmax, ymin, ymax, W, H, pad) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i=0;i<xs.length;i++){
+        const px = mapX(xs[i], xmin, xmax, W, pad);
+        const py = mapY(ys[i], ymin, ymax, H, pad);
+        if (i===0) ctx.moveTo(px,py);
+        else ctx.lineTo(px,py);
+      }
+      ctx.stroke();
+    }
+
+    function drawMarker(xm, ym, color, xmin, xmax, ymin, ymax, W, H, pad) {
+      const px = mapX(xm, xmin, xmax, W, pad);
+      const py = mapY(ym, ymin, ymax, H, pad);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(px, py, 5, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    let t = 0;
+    let paused = false;
+
+    function render() {
+      const W = canvas.clientWidth;
+      const H = canvas.clientHeight;
+      const pad = 28;
+
+      const A = parseFloat(controls.A.value);
+      const w = parseFloat(controls.w.value);
+      const phi = parseFloat(controls.phi.value);
+      const xmax = parseFloat(controls.xmax.value);
+
+      const xmin = 0;
+      const n = 900;
+      const xs = new Array(n);
+      const ys = new Array(n);
+      const dys = new Array(n);
+
+      for (let i=0;i<n;i++){
+        const x = xmin + (xmax-xmin) * (i/(n-1));
+        xs[i]=x;
+        ys[i]=f(x,A,w,phi);
+        dys[i]=df(x,A,w,phi);
+      }
+
+      let intys = integralSeries(xs, ys);
+
+      // integral to fit visually
+      // shift by mean and scale a bit if needed
+      const meanI = intys.reduce((a,b)=>a+b,0)/intys.length;
+      intys = intys.map(v => v - meanI);
+
+      const all = [];
+      if (controls.showF.checked) all.push(...ys);
+      if (controls.showD.checked) all.push(...dys);
+      if (controls.showI.checked) all.push(...intys);
+
+      let ymin = Math.min(...all, -1);
+      let ymax = Math.max(...all, 1);
+
+      // margins
+      const m = (ymax - ymin) * 0.12 || 1;
+      ymin -= m; ymax += m;
+
+      drawAxes(xmin, xmax, ymin, ymax, W, H, pad);
+
+      if (controls.showF.checked) plotLine(xs, ys, "#6aa9ff", xmin, xmax, ymin, ymax, W, H, pad);
+      if (controls.showD.checked) plotLine(xs, dys, "#ff7aa2", xmin, xmax, ymin, ymax, W, H, pad);
+      if (controls.showI.checked) plotLine(xs, intys, "#7dffb2", xmin, xmax, ymin, ymax, W, H, pad);
+
+      // animated marker
+      if (controls.animate.checked) {
+        const xm = (t % 1) * (xmax - xmin) + xmin;
+        const ym = f(xm, A, w, phi);
+        drawMarker(xm, ym, "#ffd36a", xmin, xmax, ymin, ymax, W, H, pad);
+
+        // small text with current values
+        ctx.fillStyle = "rgba(255,255,255,0.75)";
+        ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+        ctx.fillText(`x=${fmt(xm,2)}  f(x)=${fmt(ym,2)}  f'(x)=${fmt(df(xm,A,w,phi),2)}`, pad, H - 10);
+      }
+
+      if (!paused) t += 0.0022;
+
+      requestAnimationFrame(render);
+    }
+
+    function wire() {
+      updateLabels();
+      window.addEventListener("resize", () => { fitCanvas(); });
+      Object.values(controls).forEach(el => {
+        el.addEventListener("input", updateLabels);
+        el.addEventListener("change", updateLabels);
+      });
+
+      $("reset").addEventListener("click", () => {
+        controls.A.value = "1.5";
+        controls.w.value = "2.0";
+        controls.phi.value = "0.40";
+        controls.xmax.value = "18";
+        controls.showF.checked = true;
+        controls.showD.checked = true;
+        controls.showI.checked = true;
+        controls.animate.checked = true;
+        paused = false;
+        $("pause").textContent = "Pause";
+        t = 0;
+        updateLabels();
+      });
+
+      $("pause").addEventListener("click", () => {
+        paused = !paused;
+        $("pause").textContent = paused ? "Resume" : "Pause";
+      });
+    }
+
+    // init
+    fitCanvas();
+    wire();
+    render();
+  </script>
+</body>
+</html>
